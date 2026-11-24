@@ -62,8 +62,26 @@ async function request(path, { token, raw = false, method = 'GET', body } = {}) 
 export const LOCAL = typeof __LOCAL_DATA__ !== 'undefined' && __LOCAL_DATA__ && import.meta.env.DEV
 let memory = { versao: 1, itens: {} }
 
+// O GitHub responde 404 (não 403) quando o token não enxerga um repositório privado.
+// Consulta os metadados do repo para dizer exatamente o que falta no token.
+async function diagnose404(token) {
+  const res = await fetch(`https://api.github.com/repos/${REPO}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+  }).catch(() => null)
+  if (res?.ok) {
+    return new GitHubError(404, 'O token acessa o repositório, mas não tem a permissão "Contents". ' +
+      'Edite o token: Repository permissions → Contents → Read and write.')
+  }
+  return new GitHubError(404, `O token não tem acesso ao repositório privado ${REPO}. Edite o token: ` +
+    'Resource owner = sua conta; Repository access → Only select repositories → estagio-radar.')
+}
+
 export const fetchJson = (path, token) =>
-  LOCAL ? fetch(`/local-data/${path}`).then((r) => (r.ok ? r.json() : Promise.reject(new GitHubError(r.status, `Arquivo local ausente: ${path}`)))) : request(path, { token, raw: true })
+  LOCAL
+    ? fetch(`/local-data/${path}`).then((r) => (r.ok ? r.json() : Promise.reject(new GitHubError(r.status, `Arquivo local ausente: ${path}`))))
+    : request(path, { token, raw: true }).catch(async (e) => {
+        throw e.status === 404 ? await diagnose404(token) : e
+      })
 
 // Base64 <-> UTF-8
 function b64encode(str) {
