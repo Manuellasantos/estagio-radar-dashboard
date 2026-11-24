@@ -60,7 +60,8 @@ export function applyFilters(vagas, cand, f) {
 
 export function computeKpis(vagas, cand, meta) {
   const hoje = dayKey(new Date().toISOString())
-  const itens = Object.values(cand)
+  const uids = new Set(vagas.map((v) => v.uid))
+  const itens = Object.entries(cand).filter(([uid]) => uids.has(uid)).map(([, i]) => i) // ignora registros órfãos
   return {
     total: vagas.length,
     disponiveis: vagas.filter((v) => v.status_disponibilidade === 'disponivel').length,
